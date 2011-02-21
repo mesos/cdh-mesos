@@ -21,7 +21,7 @@
       <map:serializer name="fo2pdf"
                 src="org.apache.cocoon.serialization.FOPSerializer"
                 mime-type="application/pdf">
-        <user-config src="/home/chad/cdh/build/cdh3/hadoop20/0.20.2+737/source/src/docs/cn/uming.conf"/>
+        <user-config src="/Users/matei/workspace/cdh-mesos/hadoop-0.20.2+737/src/docs/cn/uming.conf"/>
         </map:serializer>
     </map:serializers>
   </map:components>

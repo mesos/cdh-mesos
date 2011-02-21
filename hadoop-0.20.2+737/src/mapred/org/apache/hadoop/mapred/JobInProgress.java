@@ -3275,4 +3275,8 @@ public class JobInProgress {
     LOG.info("jobToken generated and stored with users keys in "
         + keysFile.toUri().getPath());
   }
+  
+  int getMaxCacheLevel() {
+    return maxLevel;
+  }
 }

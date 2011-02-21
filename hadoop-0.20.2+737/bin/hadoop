@@ -241,6 +241,38 @@ elif [ "$COMMAND" = "version" ] ; then
   CLASS=org.apache.hadoop.util.VersionInfo
   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
 elif [ "$COMMAND" = "jar" ] ; then
+  if [ "$HADOOP_USE_MESOS_LAUNCHER" = "1" ]; then
+    # Use the Mesos JobTracker launcher to manage one JobTracker per user.
+    # We check for a running JT for the current user, or launch one, using
+    # the mesos-jobtracker-launcher script. This script outputs the address
+    # of the JT, which we then configure the jar command to work with by
+    # creating a small mapred-site.xml file that points to it.
+    # Please see Mesos documentation for a more detailed explanation of the
+    # Mesos JobTracker launcher. This feature is currently PRE-ALPHA and is
+    # subject to change in future releases.
+    echo "Locating Mesos JobTracker for $USER..."
+    MESOS_JOBTRACKER=`$HADOOP_HOME/bin/mesos-jobtracker-launcher $USER`
+    echo "JobTracker found: $MESOS_JOBTRACKER"
+    if [ "$?" -ne "0" ] ; then
+      echo "Locating or launching JobTracker on Mesos failed" >&2
+      exit 1
+    fi
+    NEW_CONF_DIR=`mktemp -d -t mesos-jobtracker-launcher.XXXXXXXX`
+    if [ "$?" -ne "0" ] ; then
+      echo "mktemp failed" >&2
+      exit 1
+    fi
+    echo "<?xml version=\"1.0\"?>
+    <configuration>
+    <xi:include href=\"file://$HADOOP_CONF_DIR/mapred-site.xml\" xmlns:xi=\"http://www.w3.org/2001/XInclude\" />
+    <property>
+      <name>mapred.job.tracker</name>
+      <value>$MESOS_JOBTRACKER</value>
+    </property>
+    </configuration>
+    " > $NEW_CONF_DIR/mapred-site.xml
+    CLASSPATH="$NEW_CONF_DIR:$CLASSPATH"
+  fi
   CLASS=org.apache.hadoop.util.RunJar
   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
 elif [ "$COMMAND" = "distcp" ] ; then
@@ -264,6 +296,17 @@ elif [ "$COMMAND" = "sampler" ] ; then
 else
   CLASS=$COMMAND
 fi
+
+# add Mesos to classpath
+if [ "x$MESOS_HOME" == "x" ] ; then
+  if [ -d "$HADOOP_HOME/../../src/swig/java" ] ; then
+    MESOS_HOME=`cd "$HADOOP_HOME/../../"; pwd`
+  fi
+fi
+if [ "x$MESOS_HOME" != "x" ] ; then
+  CLASSPATH="$MESOS_HOME/lib/java/mesos.jar:$CLASSPATH"
+fi
+CLASSPATH="$CLASSPATH:$HADOOP_HOME/build/contrib/mesos/classes"
 
 # cygwin path translation
 if $cygwin; then
@@ -295,6 +338,15 @@ if [ -d "${HADOOP_HOME}/build/native" -o -d "${HADOOP_HOME}/lib/native" -o -d "$
   fi
 
   _JSVC_PATH=${HADOOP_HOME}/sbin/${JAVA_PLATFORM}/jsvc
+fi
+
+# add Mesos to Java library path
+if [ "x$MESOS_HOME" != "x" ] ; then
+  if [ "x$JAVA_LIBRARY_PATH" == "x" ] ; then
+    JAVA_LIBRARY_PATH="$MESOS_HOME/swig/java"
+  else
+    JAVA_LIBRARY_PATH="$JAVA_LIBRARY_PATH:$MESOS_HOME/swig/java"
+  fi
 fi
 
 # cygwin path translation

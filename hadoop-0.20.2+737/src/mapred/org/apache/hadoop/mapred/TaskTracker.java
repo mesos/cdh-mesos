@@ -374,10 +374,11 @@ public class TaskTracker
   
   
     
-  private TaskTrackerInstrumentation myInstrumentation = null;
-
-  public TaskTrackerInstrumentation getTaskTrackerInstrumentation() {
-    return myInstrumentation;
+  private List<TaskTrackerInstrumentation> instrumentations =
+    new ArrayList<TaskTrackerInstrumentation>();
+  
+  public List<TaskTrackerInstrumentation> getTaskTrackerInstrumentations() {
+    return instrumentations;
   }
   
   /**
@@ -631,16 +632,21 @@ public class TaskTracker
     //tweak the probe sample size (make it a function of numCopiers)
     probe_sample_size = this.fConf.getInt("mapred.tasktracker.events.batchsize", 500);
     
-    Class<? extends TaskTrackerInstrumentation> metricsInst = getInstrumentationClass(fConf);
+    Class<?>[] instrumentationClasses = getInstrumentationClasses(fConf);
     try {
-      java.lang.reflect.Constructor<? extends TaskTrackerInstrumentation> c =
-        metricsInst.getConstructor(new Class[] {TaskTracker.class} );
-      this.myInstrumentation = c.newInstance(this);
+      for (Class<?> cls: instrumentationClasses) {
+        java.lang.reflect.Constructor<?> c =
+          cls.getConstructor(new Class[] {TaskTracker.class} );
+        TaskTrackerInstrumentation inst =
+          (TaskTrackerInstrumentation) c.newInstance(this);
+        instrumentations.add(inst);
+      }
     } catch(Exception e) {
       //Reflection can throw lots of exceptions -- handle them all by 
       //falling back on the default.
       LOG.error("failed to initialize taskTracker metrics", e);
-      this.myInstrumentation = new TaskTrackerMetricsInst(this);
+      instrumentations.clear();
+      instrumentations.add(new TaskTrackerMetricsInst(this));
     }
     
     // bind address
@@ -752,10 +758,9 @@ public class TaskTracker
     return fConf.getBoolean(JobConf.MR_ACLS_ENABLED, false);
   }
 
-  public static Class<? extends TaskTrackerInstrumentation> getInstrumentationClass(
-    Configuration conf) {
-    return conf.getClass("mapred.tasktracker.instrumentation",
-        TaskTrackerMetricsInst.class, TaskTrackerInstrumentation.class);
+  public static Class<?>[] getInstrumentationClasses(Configuration conf) {
+    return conf.getClasses("mapred.tasktracker.instrumentation",
+        TaskTrackerMetricsInst.class);
   }
 
   public static void setInstrumentationClass(
@@ -1683,7 +1688,9 @@ public class TaskTracker
             reduceTotal--;
           }
           try {
-            myInstrumentation.completeTask(taskStatus.getTaskID());
+            for (TaskTrackerInstrumentation inst: instrumentations) {
+              inst.completeTask(taskStatus.getTaskID());
+            }
           } catch (MetricsException me) {
             LOG.warn("Caught: " + StringUtils.stringifyException(me));
           }
@@ -1770,7 +1777,9 @@ public class TaskTracker
           LOG.info(tip.getTask().getTaskID() + ": " + msg);
           ReflectionUtils.logThreadInfo(LOG, "lost task", 30);
           tip.reportDiagnosticInfo(msg);
-          myInstrumentation.timedoutTask(tip.getTask().getTaskID());
+          for (TaskTrackerInstrumentation inst: instrumentations) {
+            inst.timedoutTask(tip.getTask().getTaskID());
+          }
           purgeTask(tip, true);
         }
       }
@@ -2600,7 +2609,9 @@ public class TaskTracker
       runner.signalDone();
       LOG.info("Task " + task.getTaskID() + " is done.");
       LOG.info("reported output size for " + task.getTaskID() +  "  was " + taskStatus.getOutputSize());
-
+      for (TaskTrackerInstrumentation inst: instrumentations) {
+        inst.statusUpdate(task, taskStatus);
+      }
     }
     
     public boolean wasKilled() {
@@ -2936,6 +2947,9 @@ public class TaskTracker
       taskStatus.setFinishTime(System.currentTimeMillis());
       removeFromMemoryManager(task.getTaskID());
       releaseSlot();
+      for (TaskTrackerInstrumentation inst: instrumentations) {
+        inst.statusUpdate(task, taskStatus);
+      }
       notifyTTAboutTaskCompletion();
     }
     
@@ -2968,6 +2982,9 @@ public class TaskTracker
                              failure);
         runningTasks.put(task.getTaskID(), this);
         mapTotal++;
+        for (TaskTrackerInstrumentation inst: instrumentations) {
+          inst.statusUpdate(task, taskStatus);
+        }
       } else {
         LOG.warn("Output already reported lost:"+task.getTaskID());
       }
@@ -3149,6 +3166,9 @@ public class TaskTracker
     TaskInProgress tip = tasks.get(taskid);
     if (tip != null) {
       tip.reportProgress(taskStatus);
+      for (TaskTrackerInstrumentation inst: instrumentations) {
+        inst.statusUpdate(tip.getTask(), taskStatus);
+      }
       return true;
     } else {
       LOG.warn("Progress from unknown child task: "+taskid);

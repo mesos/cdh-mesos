@@ -152,6 +152,7 @@ abstract public class Task implements Writable, Configurable {
   protected TaskUmbilicalProtocol umbilical;
   private int numSlotsRequired;
   protected SecretKey tokenSecret;
+  protected String extraData = "";
 
   ////////////////////////////////////////////
   // Constructors
@@ -399,6 +400,7 @@ abstract public class Task implements Writable, Configurable {
     out.writeBoolean(writeSkipRecs);
     out.writeBoolean(taskCleanup); 
     Text.writeString(out, user);
+    Text.writeString(out, extraData);
   }
   
   public void readFields(DataInput in) throws IOException {
@@ -423,6 +425,7 @@ abstract public class Task implements Writable, Configurable {
       setPhase(TaskStatus.Phase.CLEANUP);
     }
     user = Text.readString(in);
+    extraData = Text.readString(in);
   }
 
   @Override
