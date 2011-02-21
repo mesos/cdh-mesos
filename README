@@ -1,0 +1,5 @@
+This is a patched version of Cloudera's Distribution for Hadoop (CDH) with
+support for running on top of Mesos. Setup instructions are available at
+https://github.com/mesos/mesos/wiki/Running-Hadoop-on-Mesos.
+
+This project is not affiliated with Cloudera or supported by Cloudera.
