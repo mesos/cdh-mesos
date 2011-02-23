@@ -41,6 +41,9 @@ public class FrameworkExecutor extends Executor {
   @Override
   public void init(ExecutorDriver d, ExecutorArgs args) {
     try {
+      Thread.currentThread().setContextClassLoader(
+        this.getClass().getClassLoader());
+
       this.driver = d;
       slaveId = args.getSlaveId();
       
