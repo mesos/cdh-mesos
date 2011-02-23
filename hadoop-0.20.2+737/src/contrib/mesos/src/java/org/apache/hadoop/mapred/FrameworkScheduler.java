@@ -285,7 +285,12 @@ public class FrameworkScheduler extends Scheduler {
   @Override
   public ExecutorInfo getExecutorInfo(SchedulerDriver driver) {
     try {
-      String execPath = new File("bin/mesos-executor").getCanonicalPath();
+      // Read executor path either from an explicitly given parameter or by
+      // assuming that Hadoop is installed in the same path on the slaves
+      String execPath = conf.get("mapred.mesos.executor.path", null);
+      if (execPath == null) {
+        execPath = new File("bin/mesos-executor").getCanonicalPath();
+      }
       byte[] initArg = conf.get("mapred.job.tracker").getBytes("US-ASCII");
       return new ExecutorInfo(execPath, initArg);
     } catch (IOException e) {
