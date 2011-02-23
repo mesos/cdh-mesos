@@ -41,6 +41,9 @@ public class FrameworkExecutor extends Executor {
   @Override
   public void init(ExecutorDriver d, ExecutorArgs args) {
     try {
+      Thread.currentThread().setContextClassLoader(
+        TaskTracker.class.getClassLoader());
+
       this.driver = d;
       slaveId = args.getSlaveId();
       
@@ -66,7 +69,6 @@ public class FrameworkExecutor extends Executor {
       new Thread("TaskTracker run thread") {
         @Override
         public void run() {
-          setContextClassLoader(TaskTracker.class.getClassLoader());
           taskTracker.run();
         }
       }.start();
