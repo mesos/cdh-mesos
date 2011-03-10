@@ -342,8 +342,12 @@ public class FrameworkScheduler extends Scheduler {
       // Look for a map with the required level
       for (JobInProgress job: jobs) {
         int state = job.getStatus().getRunState();
-        if (state == JobStatus.RUNNING && hasMapToLaunch(job, host, maxLevel)) {
-          return true;
+        if (state == JobStatus.RUNNING) {
+          int availLevel = availableMapLevel(job, host, maxLevel);
+          if (availLevel != -1) {
+            lastMapWasLocal = (availLevel == 0);
+            return true;
+          }
         }
       }
     }
@@ -579,7 +583,8 @@ public class FrameworkScheduler extends Scheduler {
   /**
    * Check whether the job can launch a map task on a given node, with a given
    * level of locality (maximum cache level). Also includes job setup and
-   * cleanup tasks, as well as map cleanup tasks.
+   * cleanup tasks, as well as map cleanup tasks. Returns the locality level of
+   * the launchable map if one exists, or -1 otherwise.
    * 
    * This is currently fairly long because it replicates a lot of the logic
    * in findNewMapTask. Unfortunately, it's not easy to just use findNewMapTask
@@ -587,7 +592,7 @@ public class FrameworkScheduler extends Scheduler {
    * this method would be to just launch TaskTrackers on every node, without
    * first checking for locality.
    */
-  boolean hasMapToLaunch(JobInProgress job, String host, int maxCacheLevel) {
+  int availableMapLevel(JobInProgress job, String host, int maxCacheLevel) {
     synchronized (job) {
       // For scheduling a map task, we have two caches and a list (optional)
       //  I)   one for non-running task
@@ -602,11 +607,11 @@ public class FrameworkScheduler extends Scheduler {
   
       //if (canLaunchJobCleanupTask()) return true;
       //if (canLaunchSetupTask()) return true;
-      if (!job.mapCleanupTasks.isEmpty()) return true;
+      if (!job.mapCleanupTasks.isEmpty()) return 0;
       
       // Return false right away if the task cache isn't ready, either because
       // we are still initializing or because we are cleaning up
-      if (job.nonRunningMapCache == null) return false;
+      if (job.nonRunningMapCache == null) return -1;
       
       // We fall to linear scan of the list (III above) if we have misses in the 
       // above caches
@@ -634,14 +639,14 @@ public class FrameworkScheduler extends Scheduler {
         for (level = 0;level < maxLevelToSchedule; ++level) {
           List <TaskInProgress> cacheForLevel = job.nonRunningMapCache.get(key);
           if (hasUnlaunchedTask(cacheForLevel)) {
-            return true;
+            return level;
           }
           key = key.getParent();
         }
         
         // Check if we need to only schedule a local task (node-local/rack-local)
         if (level == maxCacheLevel) {
-          return false;
+          return -1;
         }
       }
   
@@ -667,13 +672,13 @@ public class FrameworkScheduler extends Scheduler {
   
         List<TaskInProgress> cache = job.nonRunningMapCache.get(parent);
         if (hasUnlaunchedTask(cache)) {
-          return true;
+          return maxLevel-1;
         }
       }
   
       // 3. Search non-local tips for a new task
       if (hasUnlaunchedTask(job.nonLocalMaps))
-        return true;
+        return 0;
       
       //
       // II) Running TIP :
@@ -691,7 +696,7 @@ public class FrameworkScheduler extends Scheduler {
             if (cacheForLevel != null) {
               for (TaskInProgress tip: cacheForLevel) {
                 if (tip.isRunning() && tip.hasSpeculativeTask(time, avgProg)) {
-                  return true;
+                  return level;
                 }
               }
             }
@@ -711,7 +716,7 @@ public class FrameworkScheduler extends Scheduler {
           if (cache != null) {
             for (TaskInProgress tip: cache) {
               if (tip.isRunning() && tip.hasSpeculativeTask(time, avgProg)) {
-                return true;
+                return maxLevel-1;
               }
             }
           }
@@ -720,12 +725,12 @@ public class FrameworkScheduler extends Scheduler {
         // 3. Check non-local tips for speculation
         for (TaskInProgress tip: job.nonLocalRunningMaps) {
           if (tip.isRunning() && tip.hasSpeculativeTask(time, avgProg)) {
-            return true;
+            return 0;
           }
         }
       }
       
-      return false;
+      return -1;
     }
   }
   
