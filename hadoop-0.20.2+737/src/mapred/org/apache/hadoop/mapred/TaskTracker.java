@@ -1937,6 +1937,14 @@ public class TaskTracker
       if (tip.getTask().isMapTask()) {
         indexCache.removeMap(tip.getTask().getTaskID().toString());
       }
+      // Report the task as killed to Instrumentation objects
+      TaskStatus status = (TaskStatus) tip.getStatus().clone();
+      TaskStatus.State state = 
+        (wasFailure ? TaskStatus.State.FAILED : TaskStatus.State.KILLED);
+      status.setRunState(state);
+      for (TaskTrackerInstrumentation inst: instrumentations) {
+        inst.statusUpdate(tip.getTask(), status);
+      }
     }
   }
 
