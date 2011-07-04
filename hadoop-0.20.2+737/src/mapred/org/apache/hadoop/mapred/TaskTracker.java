@@ -2823,7 +2823,10 @@ public class TaskTracker
         cleanup(needCleanup);
       } catch (IOException ie) {
       }
-
+      
+      for (TaskTrackerInstrumentation inst: instrumentations) {
+        inst.statusUpdate(task, taskStatus);
+      }
     }
     
 
