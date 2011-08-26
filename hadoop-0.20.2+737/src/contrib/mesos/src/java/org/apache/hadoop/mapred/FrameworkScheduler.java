@@ -61,6 +61,8 @@ public class FrameworkScheduler extends Scheduler {
     String mesosSlaveId;
     List<MesosTask> maps = new LinkedList<MesosTask>();
     List<MesosTask> reduces = new LinkedList<MesosTask>();
+    int maxMaps = 1;
+    int maxReduces = 1;
     
     public TaskTrackerInfo(String mesosSlaveId) {
       this.mesosSlaveId = mesosSlaveId;
@@ -124,11 +126,6 @@ public class FrameworkScheduler extends Scheduler {
   long timeWaitedForLocalMap = 0;
   long lastCanLaunchMapTime = -1;
   
-  // Node slot couts
-  // TODO: These should be configurable per node rather than fixed like this
-  int maxMapsPerNode;
-  int maxReducesPerNode;
-  
   public FrameworkScheduler(MesosScheduler mesosSched) {
     this.mesosSched = mesosSched;
     this.conf = mesosSched.getConf();
@@ -136,8 +133,6 @@ public class FrameworkScheduler extends Scheduler {
     cpusPerTask = conf.getInt("mapred.mesos.task.cpus", 1);
     memPerTask = conf.getInt("mapred.mesos.task.mem", 1024);
     localityWait = conf.getLong("mapred.mesos.localitywait", 5000);
-    maxMapsPerNode = conf.getInt("mapred.tasktracker.map.tasks.maximum", 2);
-    maxReducesPerNode = conf.getInt("mapred.tasktracker.reduce.tasks.maximum", 2);
   }
 
   @Override
@@ -308,7 +303,7 @@ public class FrameworkScheduler extends Scheduler {
       LOG.error("No TaskTrackerInfo for " + host + "! This shouldn't happen.");
       return false;
     }
-    if (ttInfo.maps.size() >= maxMapsPerNode) {
+    if (ttInfo.maps.size() >= ttInfo.maxMaps) {
       return false;
     }
     
@@ -321,8 +316,12 @@ public class FrameworkScheduler extends Scheduler {
       }
     }
     // TODO (!!!): Count speculatable tasks and add them to neededMaps
+    // For now, we just add 1
+    if (jobs.size() > 0)
+      neededMaps += 1;
     
     if (unassignedMaps < neededMaps) {
+      /*
       // Figure out what locality level to allow using delay scheduling
       long now = System.currentTimeMillis();
       if (lastCanLaunchMapTime == -1)
@@ -339,6 +338,8 @@ public class FrameworkScheduler extends Scheduler {
         maxLevel = Integer.MAX_VALUE;
       }
       lastCanLaunchMapTime = now;
+      */
+      int maxLevel = Integer.MAX_VALUE;
       // Look for a map with the required level
       for (JobInProgress job: jobs) {
         int state = job.getStatus().getRunState();
@@ -377,7 +378,7 @@ public class FrameworkScheduler extends Scheduler {
       LOG.error("No TaskTrackerInfo for " + host + "! This shouldn't happen.");
       return false;
     }
-    if (ttInfo.reduces.size() >= maxReducesPerNode) {
+    if (ttInfo.reduces.size() >= ttInfo.maxReduces) {
       return false;
     }
     
@@ -390,6 +391,9 @@ public class FrameworkScheduler extends Scheduler {
       }
     }
     // TODO (!!!): Count speculatable tasks and add them to neededReduces
+    // For now, we just add 1
+    if (jobs.size() > 0)
+      neededReduces += 1;
     
     if (neededReduces > unassignedReduces) {
       // Find a reduce to launch
@@ -440,6 +444,8 @@ public class FrameworkScheduler extends Scheduler {
           LOG.error("No TaskTrackerInfo for " + host + "! This shouldn't happen.");
           return null;
         }
+        ttInfo.maxMaps = tts.getMaxMapSlots();
+        ttInfo.maxReduces = tts.getMaxReduceSlots();
         
         int clusterSize = jobTracker.getClusterStatus().getTaskTrackers();
         int numHosts = jobTracker.getNumberOfUniqueHosts();
@@ -552,7 +558,7 @@ public class FrameworkScheduler extends Scheduler {
   public void killTimedOutTasks() {
     synchronized (jobTracker) {
       long curTime = System.currentTimeMillis();
-      long timeout = 2 * jobTracker.getNextHeartbeatInterval();
+      long timeout = 20000;
       for (TaskTrackerInfo tt: ttInfos.values()) {
         killTimedOutTasks(tt.maps, curTime - timeout);
         killTimedOutTasks(tt.reduces, curTime - timeout);
