@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -179,6 +180,7 @@ public class FrameworkScheduler extends Scheduler {
         for (int i = 0; i < numOffers; i++) {
           indices.add(i);
         }
+        Collections.shuffle(indices);
         while (indices.size() > 0) {
           for (Iterator<Integer> it = indices.iterator(); it.hasNext();) {
             int i = it.next();
@@ -227,8 +229,8 @@ public class FrameworkScheduler extends Scheduler {
     String taskType = null;
     boolean haveMaps = canLaunchMap(host);
     boolean haveReduces = canLaunchReduce(host);
-    LOG.info("Looking at " + host + ": haveMaps=" + haveMaps + 
-        ", haveReduces=" + haveReduces);
+    //LOG.info("Looking at " + host + ": haveMaps=" + haveMaps + 
+    //    ", haveReduces=" + haveReduces);
     if (!haveMaps && !haveReduces) {
       return null;
     } else if (haveMaps && !haveReduces) {
@@ -242,7 +244,7 @@ public class FrameworkScheduler extends Scheduler {
       else
         taskType = "map";
     }
-    LOG.info("Task type chosen: " + taskType);
+    //LOG.info("Task type chosen: " + taskType);
     
     // Get a Mesos task ID for the new task
     int mesosId = newMesosTaskId();
@@ -257,6 +259,8 @@ public class FrameworkScheduler extends Scheduler {
     MesosTask nt = new MesosTask(isMap, mesosId, host);
     mesosIdToMesosTask.put(mesosId, nt);
     ttInfo.add(nt);
+
+    LOG.info("Launching Mesos task " + mesosId + " as " + taskType + " on " + host);
     
     // Create a task description to pass back to Mesos
     String name = "task " + mesosId + " (" + taskType + ")";
@@ -411,6 +415,7 @@ public class FrameworkScheduler extends Scheduler {
   @Override
   public void statusUpdate(SchedulerDriver d, mesos.TaskStatus status) {
     TaskState state = status.getState();
+    LOG.info("Task " + status.getTaskId() + " is " + state);
     if (state == TaskState.TASK_FINISHED || state == TaskState.TASK_FAILED ||
         state == TaskState.TASK_KILLED || state == TaskState.TASK_LOST) {
       synchronized (jobTracker) {
@@ -563,6 +568,7 @@ public class FrameworkScheduler extends Scheduler {
         killTimedOutTasks(tt.maps, curTime - timeout);
         killTimedOutTasks(tt.reduces, curTime - timeout);
       }
+      driver.reviveOffers();
     }
   }
     
